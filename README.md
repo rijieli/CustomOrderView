@@ -2,4 +2,4 @@
 
 Custom drag-and-drop reordering demonstration using SwiftUI
 
-![Demo](https://github.com/rijieli/CustomOrderView/blob/main/demo.gif)
+![Demo](https://github.com/rijieli/SwiftUI-DragDropReorder/blob/main/demo.gif)
