@@ -20,69 +20,82 @@ enum MenuItem: String, Identifiable, CaseIterable {
 
 struct ContentView: View {
     @State var items = MenuItem.allCases
-    @State var selected: MenuItem?
-    @GestureState var longPress = false
-    @State var draggingItemPosition: CGPoint = .zero
+    @State var draggedItem: MenuItem?
+    @GestureState var longPressState = false
+    @State var draggingItemOffsetY = 0.0
 
     let coordinateSpace = CoordinateSpace.named("ContentView")
-    let cellHeight = 60.0
+    let cellHeight = 56.0
 
     var body: some View {
         ZStack {
             ScrollView {
-                ForEach(items) { item in
-                    itemCell(item)
-                        .opacity(item == selected ? 0 : 1)
-                        .contentShape(.rect)
-                        .gesture(mixedGesture(of: item))
+                VStack(spacing: 0) {
+                    ForEach(Array(items.enumerated()), id: \.element) {
+                        idx, item in
+                        itemCell(item)
+                            .opacity(item == draggedItem ? 0 : 1)
+                            .contentShape(.rect)
+                            .overlay(alignment: .bottom) {
+                                if idx != items.indices.last {
+                                    Color.primary.opacity(0.05)
+                                        .frame(height: 1)
+                                        .padding(.leading, 16)
+                                }
+                            }
+                            .gesture(mixedGesture(of: item))
+                    }
                 }
+                .clipShape(RoundedRectangle(cornerRadius: 14))
             }
             .overlay {
-                if let selected {
+                if let draggedItem {
                     GeometryReader { proxy in
-                        itemCell(selected)
-                            .transition(.opacity)
-                            .scaleEffect(1.05)
-                            .offset(y: draggingItemPosition.y - cellHeight / 2)
-                            .id(selected)
+                        itemCell(draggedItem)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .scaleEffect(1.03)
+                            .offset(y: draggingItemOffsetY - cellHeight / 2)
+                            .id(draggedItem)
                     }
                 }
             }
             .coordinateSpace(name: coordinateSpace)
-            .padding()
-            .animation(.interactiveSpring(), value: selected)
+            .padding(20)
+            .animation(nil, value: draggedItem)
+            .animation(.interactiveSpring(), value: items)
+            .animation(.interactiveSpring(), value: draggingItemOffsetY)
         }
-        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(uiColor: .systemBackground))
     }
 
+    /// NOTE: DragGesture minimumDistance 0 is required
     func mixedGesture(of item: MenuItem) -> some Gesture {
         LongPressGesture(minimumDuration: 0.5)
             .sequenced(
                 before: DragGesture(
-                    minimumDistance: 10,
+                    minimumDistance: 0,
                     coordinateSpace: .named(coordinateSpace)
                 )
             )
-            .updating($longPress) { value, state, _ in
+            .updating($longPressState) { value, state, _ in
                 switch value {
-                case .first(true):
+                case .first(_):
+                    // When using sequenced gesture, this block never be called
                     break
                 case .second(true, nil):
-                    // This is the real time when dragging Start
+                    // This is the **real time** when dragging start
                     guard let index = items.firstIndex(of: item) else {
                         break
                     }
-                    // Compute height of the cell
-                    // Compute the position of the dragging item
                     state = true
-                    selected = item
-                    draggingItemPosition = CGPoint(
-                        x: 0, y: cellHeight * CGFloat(index + 1))
+                    draggedItem = item
+                    draggingItemOffsetY =
+                        cellHeight * CGFloat(index + 1) - (cellHeight / 2)
                 case .second(true, let drag):
+                    // This block will be change items order when dragging
                     guard let drag else { break }
-                    state = true
-                    selected = item
-                    draggingItemPosition = drag.location
+                    draggingItemOffsetY = drag.location.y
 
                     // Calculate the target index based on drag position
                     let targetIndex = Int(
@@ -106,40 +119,39 @@ struct ContentView: View {
                                 item, at: targetIndex)
                         }
                     }
-                default:
-                    state = false
+                case .second(false, _):
+                    break
                 }
             }
-            .onChanged({ g in
-                switch g {
-                case .second(let v, let drag):
-                    print("onChanged second: \(v)")
-                case .first(let v):
-                    print("onChanged first: \(v)")
-                }
-            })
             .onEnded { value in
                 switch value {
                 case .first(true):
-                    selected = nil
-                    draggingItemPosition = .zero
+                    draggedItem = nil
+                    draggingItemOffsetY = 0
                 case .second(true, _):
-                    selected = nil
-                    draggingItemPosition = .zero
+                    draggedItem = nil
+                    draggingItemOffsetY = 0
                 default:
-                    print("onChanged onEnded default")
+                    break
                 }
             }
     }
 
     func itemCell(_ item: MenuItem) -> some View {
-        Text(item.rawValue.uppercased())
-            .font(.title)
-            .frame(maxWidth: .infinity)
+        Text(item.rawValue.capitalized)
+            .font(.headline)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(alignment: .trailing) {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(item == draggedItem ? .primary : .gray)
+            }
+            .padding(.horizontal, 20)
             .frame(height: cellHeight)
             .background {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.gray)
+                Color(uiColor: .secondarySystemBackground)
             }
+            .foregroundStyle(.primary)
+            .transition(.opacity)
     }
 }
