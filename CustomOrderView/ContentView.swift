@@ -34,61 +34,7 @@ struct ContentView: View {
                     itemCell(item)
                         .opacity(item == selected ? 0 : 1)
                         .contentShape(.rect)
-                        .gesture(
-                            LongPressGesture(minimumDuration: 0.5)
-                                .sequenced(
-                                    before: DragGesture(
-                                        minimumDistance: 10,
-                                        coordinateSpace: .named(coordinateSpace)
-                                    )
-                                )
-                                .updating($longPress) { value, state, _ in
-                                    switch value {
-                                    case .first(true):
-                                        state = true
-                                        selected = item
-                                    case .second(true, let drag):
-                                        guard let drag else { return }
-                                        state = true
-                                        selected = item
-                                        draggingItemPosition = drag.location
-
-                                        // Calculate the target index based on drag position
-                                        let targetIndex = Int(
-                                            (drag.location.y) / cellHeight)
-                                        guard targetIndex >= 0,
-                                            targetIndex < items.count
-                                        else { return }
-
-                                        // Get the current index of the selected item
-                                        guard
-                                            let currentIndex = items.firstIndex(
-                                                of: item)
-                                        else { return }
-
-                                        // Only update if the indices are different
-                                        if targetIndex != currentIndex {
-                                            withAnimation {
-                                                let item = items.remove(
-                                                    at: currentIndex)
-                                                items.insert(
-                                                    item, at: targetIndex)
-                                            }
-                                        }
-                                    default:
-                                        break
-                                    }
-                                }
-                                .onEnded { value in
-                                    switch value {
-                                    case .second(true, _):
-                                        selected = nil
-                                        draggingItemPosition = .zero
-                                    default:
-                                        break
-                                    }
-                                }
-                        )
+                        .gesture(mixedGesture(of: item))
                 }
             }
             .overlay {
@@ -98,6 +44,7 @@ struct ContentView: View {
                             .transition(.opacity)
                             .scaleEffect(1.05)
                             .offset(y: draggingItemPosition.y - cellHeight / 2)
+                            .id(selected)
                     }
                 }
             }
@@ -106,6 +53,83 @@ struct ContentView: View {
             .animation(.interactiveSpring(), value: selected)
         }
         .padding()
+    }
+
+    func mixedGesture(of item: MenuItem) -> some Gesture {
+        LongPressGesture(minimumDuration: 0.5)
+            .sequenced(
+                before: DragGesture(
+                    minimumDistance: 10,
+                    coordinateSpace: .named(coordinateSpace)
+                )
+            )
+            .updating($longPress) { value, state, _ in
+                switch value {
+                case .first(true):
+                    break
+                case .second(true, nil):
+                    // This is the real time when dragging Start
+                    guard let index = items.firstIndex(of: item) else {
+                        break
+                    }
+                    // Compute height of the cell
+                    // Compute the position of the dragging item
+                    state = true
+                    selected = item
+                    draggingItemPosition = CGPoint(
+                        x: 0, y: cellHeight * CGFloat(index + 1))
+                case .second(true, let drag):
+                    guard let drag else { break }
+                    state = true
+                    selected = item
+                    draggingItemPosition = drag.location
+
+                    // Calculate the target index based on drag position
+                    let targetIndex = Int(
+                        (drag.location.y) / cellHeight)
+                    guard targetIndex >= 0,
+                        targetIndex < items.count
+                    else { break }
+
+                    // Get the current index of the selected item
+                    guard
+                        let currentIndex = items.firstIndex(
+                            of: item)
+                    else { break }
+
+                    // Only update if the indices are different
+                    if targetIndex != currentIndex {
+                        withAnimation {
+                            let item = items.remove(
+                                at: currentIndex)
+                            items.insert(
+                                item, at: targetIndex)
+                        }
+                    }
+                default:
+                    state = false
+                }
+            }
+            .onChanged({ g in
+                switch g {
+                case .second(let v, let drag):
+                    print("onChanged second: \(v)")
+                case .first(let v):
+                    print("onChanged first: \(v)")
+                }
+            })
+            .onEnded { value in
+                switch value {
+                case .first(true):
+                    selected = nil
+                    draggingItemPosition = .zero
+                case .second(true, _):
+                    selected = nil
+                    draggingItemPosition = .zero
+                default:
+                    print("onChanged onEnded default")
+                }
+            }
     }
 
     func itemCell(_ item: MenuItem) -> some View {
